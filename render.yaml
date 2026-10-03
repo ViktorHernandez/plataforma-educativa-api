@@ -1,0 +1,120 @@
+services:
+  - type: web
+    name: plataforma-educativa-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health/ready
+    autoDeployTrigger: off
+    envVars:
+      - fromGroup: plataforma-educativa-shared
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: plataforma-educativa-redis
+          property: connectionString
+
+  - type: worker
+    name: plataforma-educativa-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node --enable-source-maps dist/worker.js
+    plan: starter
+    autoDeployTrigger: off
+    envVars:
+      - fromGroup: plataforma-educativa-shared
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: plataforma-educativa-redis
+          property: connectionString
+
+  - type: pserv
+    name: plataforma-educativa-clamav
+    runtime: image
+    image:
+      url: docker.io/clamav/clamav:stable
+    plan: standard
+    autoDeployTrigger: off
+
+  - type: keyvalue
+    name: plataforma-educativa-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+envVarGroups:
+  - name: plataforma-educativa-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: TRUST_PROXY
+        value: "1"
+      - key: API_DOCS_ENABLED
+        value: "false"
+      - key: DATABASE_SSL_MODE
+        value: require
+      - key: DATABASE_POOL_MAX
+        value: "5"
+      - key: REDIS_KEY_PREFIX
+        value: "pe:"
+      - key: ANTIVIRUS_PROVIDER
+        value: clamav
+      - key: FILE_SCAN_REQUIRED
+        value: "true"
+      - key: STORAGE_PROVIDER
+        value: s3
+      - key: MAIL_PROVIDER
+        value: resend
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: PUBLIC_API_URL
+        sync: false
+      - key: WEB_APP_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: OAUTH_REDIRECT_ALLOWLIST
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: JWT_ISSUER
+        sync: false
+      - key: JWT_AUDIENCE
+        sync: false
+      - key: JWT_SIGNING_KEYS
+        sync: false
+      - key: ENCRYPTION_KEYS
+        sync: false
+      - key: SECRETS_PEPPER
+        sync: false
+      - key: METRICS_TOKEN
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: CLAMAV_HOST
+        value: plataforma-educativa-clamav
+      - key: CLAMAV_PORT
+        value: "3310"

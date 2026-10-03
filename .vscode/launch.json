@@ -1,0 +1,82 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (debug)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--env-file-if-exists=.env",
+        "--import",
+        "tsx"
+      ],
+      "program": "${workspaceFolder}/src/main.ts",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ],
+      "env": {
+        "LOG_PRETTY": "true"
+      }
+    },
+    {
+      "name": "Worker (debug)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "--env-file-if-exists=.env",
+        "--import",
+        "tsx"
+      ],
+      "program": "${workspaceFolder}/src/worker.ts",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ],
+      "env": {
+        "LOG_PRETTY": "true",
+        "PORT": "3001"
+      }
+    },
+    {
+      "name": "Tests: current file",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": [
+        "run",
+        "${relativeFile}"
+      ]
+    },
+    {
+      "name": "Attach to process",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "API + Worker",
+      "configurations": [
+        "API (debug)",
+        "Worker (debug)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

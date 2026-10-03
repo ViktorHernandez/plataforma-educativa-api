@@ -1,0 +1,401 @@
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum ClientPlatform {
+  WEB
+  PWA
+  ANDROID
+  IOS
+  WINDOWS
+  MACOS
+  LINUX
+  OTHER
+}
+
+enum AuthMethod {
+  PASSWORD
+  OAUTH
+}
+
+enum OAuthProvider {
+  GOOGLE
+  MICROSOFT
+  GITHUB
+  APPLE
+}
+
+enum SessionRevocationReason {
+  LOGOUT
+  USER_REVOKED
+  ADMIN_REVOKED
+  PASSWORD_CHANGED
+  PASSWORD_RESET
+  REFRESH_REUSE
+  MFA_CHANGED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_DEACTIVATED
+  SECURITY
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  ACCOUNT_SETUP
+  EMAIL_CHANGE
+}
+
+enum MfaFactorType {
+  TOTP
+}
+
+enum MfaFactorStatus {
+  PENDING
+  ACTIVE
+}
+
+enum ThemePreference {
+  SYSTEM
+  LIGHT
+  DARK
+}
+
+enum IntegrationProvider {
+  GOOGLE_CALENDAR
+  MICROSOFT_CALENDAR
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  REVOKED
+  ERROR
+}
+
+enum PushProvider {
+  FCM
+  WEB_PUSH
+}
+
+model User {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  email             String     @unique @db.VarChar(320)
+  status            UserStatus @default(PENDING_VERIFICATION)
+  displayName       String     @db.VarChar(120)
+  passwordHash      String?
+  passwordChangedAt DateTime?  @db.Timestamptz(3)
+  emailVerifiedAt   DateTime?  @db.Timestamptz(3)
+  mfaEnabled        Boolean    @default(false)
+  lastLoginAt       DateTime?  @db.Timestamptz(3)
+  suspendedAt       DateTime?  @db.Timestamptz(3)
+  suspendedReason   String?    @db.VarChar(500)
+  createdAt         DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime   @updatedAt @db.Timestamptz(3)
+  deletedAt         DateTime?  @db.Timestamptz(3)
+  anonymizedAt      DateTime?  @db.Timestamptz(3)
+
+  profile                 UserProfile?
+  preference              UserPreference?
+  notificationPreferences NotificationPreference[]
+  devices                 UserDevice[]
+  sessions                Session[]
+  verificationTokens      VerificationToken[]
+  loginChallenges         LoginChallenge[]
+  mfaFactors              MfaFactor[]
+  recoveryCodes           RecoveryCode[]
+  externalIdentities      ExternalIdentity[]
+  integrations            IntegrationConnection[]
+  pushSubscriptions       PushSubscription[]
+  roleAssignments         RoleAssignment[]          @relation("RoleAssignmentUser")
+  grantedAssignments      RoleAssignment[]          @relation("RoleAssignmentGrantor")
+  memberships             InstitutionMembership[]   @relation("MembershipUser")
+  invitedMemberships      InstitutionMembership[]   @relation("MembershipInviter")
+  ownedFiles              File[]
+  createdCourses          Course[]
+  createdPrograms         Program[]
+  enrollments             Enrollment[]
+  enrollmentEvents        EnrollmentEvent[]
+  programEnrollments      ProgramEnrollment[]
+  lessonProgress          LessonProgress[]
+  certificates            Certificate[]
+  classGroupMemberships   ClassGroupMember[]
+  questionBanks           QuestionBank[]
+  questions               Question[]
+  assessments             Assessment[]
+  attempts                AssessmentAttempt[]
+  gradedAnswers           AttemptAnswer[]
+  assessmentResults       AssessmentResult[]
+  notifications           Notification[]
+  announcements           Announcement[]
+  createdConversations    Conversation[]
+  conversationLinks       ConversationParticipant[]
+  messages                Message[]
+  reportExports           ReportExport[]
+  privacyRequests         PrivacyRequest[]
+  accommodations          AssessmentAccommodation[] @relation("AccommodationLearner")
+  grantedAccommodations   AssessmentAccommodation[] @relation("AccommodationGrantor")
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_email_trgm_idx")
+  @@index([displayName(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_display_name_trgm_idx")
+  @@map("users")
+}
+
+model UserProfile {
+  userId        String   @id @db.Uuid
+  firstName     String?  @db.VarChar(80)
+  lastName      String?  @db.VarChar(80)
+  headline      String?  @db.VarChar(160)
+  bio           String?  @db.VarChar(2000)
+  pronouns      String?  @db.VarChar(40)
+  country       String?  @db.Char(2)
+  websiteUrl    String?  @db.VarChar(500)
+  organization  String?  @db.VarChar(160)
+  academicLevel String?  @db.VarChar(80)
+  fieldOfStudy  String?  @db.VarChar(120)
+  avatarFileId  String?  @unique @db.Uuid
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  user   User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatar File? @relation("ProfileAvatar", fields: [avatarFileId], references: [id], onDelete: SetNull)
+
+  @@map("user_profiles")
+}
+
+model UserPreference {
+  userId        String          @id @db.Uuid
+  locale        String          @default("es") @db.VarChar(20)
+  timezone      String          @default("UTC") @db.VarChar(64)
+  currency      String          @default("USD") @db.Char(3)
+  theme         ThemePreference @default(SYSTEM)
+  accessibility Json            @default("{}")
+  interface     Json            @default("{}")
+  privacy       Json            @default("{}")
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model NotificationPreference {
+  id        String               @id @default(uuid(7)) @db.Uuid
+  userId    String               @db.Uuid
+  category  NotificationCategory
+  channel   NotificationChannel
+  enabled   Boolean
+  updatedAt DateTime             @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, channel])
+  @@map("notification_preferences")
+}
+
+model UserDevice {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  userId        String         @db.Uuid
+  deviceKeyHash String         @db.VarChar(64)
+  name          String?        @db.VarChar(120)
+  platform      ClientPlatform
+  userAgent     String?        @db.VarChar(512)
+  lastIp        String?        @db.VarChar(64)
+  firstSeenAt   DateTime       @default(now()) @db.Timestamptz(3)
+  lastSeenAt    DateTime       @default(now()) @db.Timestamptz(3)
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions          Session[]
+  pushSubscriptions PushSubscription[]
+
+  @@unique([userId, deviceKeyHash])
+  @@map("user_devices")
+}
+
+model Session {
+  id              String                   @id @default(uuid(7)) @db.Uuid
+  userId          String                   @db.Uuid
+  deviceId        String?                  @db.Uuid
+  platform        ClientPlatform
+  authMethod      AuthMethod
+  authProvider    OAuthProvider?
+  mfaVerified     Boolean                  @default(false)
+  ipAddress       String?                  @db.VarChar(64)
+  userAgent       String?                  @db.VarChar(512)
+  createdAt       DateTime                 @default(now()) @db.Timestamptz(3)
+  authenticatedAt DateTime                 @default(now()) @db.Timestamptz(3)
+  lastSeenAt      DateTime                 @default(now()) @db.Timestamptz(3)
+  idleExpiresAt   DateTime                 @db.Timestamptz(3)
+  expiresAt       DateTime                 @db.Timestamptz(3)
+  revokedAt       DateTime?                @db.Timestamptz(3)
+  revokedReason   SessionRevocationReason?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device        UserDevice?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  refreshTokens RefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  sessionId String    @db.Uuid
+  tokenHash String    @unique @db.VarChar(64)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt DateTime  @db.Timestamptz(3)
+  rotatedAt DateTime? @db.Timestamptz(3)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model VerificationToken {
+  id         String              @id @default(uuid(7)) @db.Uuid
+  userId     String              @db.Uuid
+  purpose    VerificationPurpose
+  tokenHash  String              @unique @db.VarChar(64)
+  expiresAt  DateTime            @db.Timestamptz(3)
+  consumedAt DateTime?           @db.Timestamptz(3)
+  metadata   Json?
+  createdAt  DateTime            @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+model LoginChallenge {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique @db.VarChar(64)
+  attempts   Int       @default(0)
+  context    Json
+  expiresAt  DateTime  @db.Timestamptz(3)
+  consumedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("login_challenges")
+}
+
+model MfaFactor {
+  id               String          @id @default(uuid(7)) @db.Uuid
+  userId           String          @db.Uuid
+  type             MfaFactorType
+  status           MfaFactorStatus
+  secretCiphertext String
+  lastUsedStep     BigInt?
+  label            String?         @db.VarChar(80)
+  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
+  confirmedAt      DateTime?       @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@map("mfa_factors")
+}
+
+model RecoveryCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  codeHash  String    @db.VarChar(64)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, codeHash])
+  @@map("recovery_codes")
+}
+
+model ExternalIdentity {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  userId          String        @db.Uuid
+  provider        OAuthProvider
+  providerSubject String        @db.VarChar(255)
+  email           String?       @db.VarChar(320)
+  emailVerified   Boolean       @default(false)
+  displayName     String?       @db.VarChar(160)
+  linkedAt        DateTime      @default(now()) @db.Timestamptz(3)
+  lastUsedAt      DateTime?     @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@unique([userId, provider])
+  @@map("external_identities")
+}
+
+model IntegrationConnection {
+  id                     String              @id @default(uuid(7)) @db.Uuid
+  userId                 String              @db.Uuid
+  provider               IntegrationProvider
+  status                 IntegrationStatus   @default(ACTIVE)
+  externalAccountEmail   String?             @db.VarChar(320)
+  accessTokenCiphertext  String
+  refreshTokenCiphertext String?
+  scopes                 String[]
+  expiresAt              DateTime?           @db.Timestamptz(3)
+  externalCalendarId     String?             @db.VarChar(255)
+  syncEnabled            Boolean             @default(true)
+  lastSyncedAt           DateTime?           @db.Timestamptz(3)
+  lastError              String?             @db.VarChar(500)
+  createdAt              DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime            @updatedAt @db.Timestamptz(3)
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendarEvents CalendarEventLink[]
+
+  @@unique([userId, provider])
+  @@index([status, syncEnabled])
+  @@map("integration_connections")
+}
+
+model CalendarEventLink {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  connectionId    String   @db.Uuid
+  sourceType      String   @db.VarChar(40)
+  sourceId        String   @db.Uuid
+  externalEventId String   @db.VarChar(1024)
+  contentHash     String   @db.VarChar(64)
+  syncedAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, sourceType, sourceId])
+  @@map("calendar_event_links")
+}
+
+model PushSubscription {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  userId        String         @db.Uuid
+  deviceId      String?        @db.Uuid
+  provider      PushProvider
+  platform      ClientPlatform
+  token         String         @unique @db.VarChar(2048)
+  p256dh        String?        @db.VarChar(255)
+  authSecret    String?        @db.VarChar(255)
+  failureCount  Int            @default(0)
+  lastFailureAt DateTime?      @db.Timestamptz(3)
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  lastUsedAt    DateTime?      @db.Timestamptz(3)
+  revokedAt     DateTime?      @db.Timestamptz(3)
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device UserDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, revokedAt])
+  @@map("push_subscriptions")
+}

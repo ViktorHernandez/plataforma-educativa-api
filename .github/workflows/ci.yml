@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app_ci
+          POSTGRES_DB: plataforma_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d plataforma_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://app:app_ci@localhost:5432/plataforma_test
+      TEST_REDIS_URL: redis://localhost:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx prisma validate
+        env:
+          DATABASE_URL: postgresql://app:app_ci@localhost:5432/plataforma_test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code
+        env:
+          DATABASE_URL: postgresql://app:app_ci@localhost:5432/plataforma_test
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run --silent secrets:generate >> "$GITHUB_ENV"
+      - run: npm run openapi
+        env:
+          DATABASE_URL: postgresql://app:app_ci@localhost:5432/plataforma_test
+          REDIS_URL: redis://localhost:6379/14
+          PUBLIC_API_URL: http://localhost:3000
+          WEB_APP_URL: http://localhost:5173
+          JWT_ISSUER: http://localhost:3000
+          JWT_AUDIENCE: plataforma-educativa
+          MAIL_FROM: CI <ci@example.com>
+          ANTIVIRUS_PROVIDER: disabled
+          FILE_SCAN_REQUIRED: "false"
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag plataforma-educativa-api:ci .
+      - run: docker build --target migrate --tag plataforma-educativa-api:migrate-ci .
+      - run: docker run --rm --entrypoint sh plataforma-educativa-api:ci -c 'test ! -e node_modules/prisma && test "$(id -u)" != "0"'
+

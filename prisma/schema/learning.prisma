@@ -1,0 +1,193 @@
+enum EnrollmentStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  REJECTED
+  SUSPENDED
+  EXPIRED
+}
+
+enum EnrollmentSource {
+  SELF
+  ADMIN
+  PROGRAM
+  INVITATION
+  IMPORT
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum SectionType {
+  MODULE
+  UNIT
+}
+
+enum CertificateStatus {
+  ISSUED
+  REVOKED
+}
+
+model Enrollment {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  userId            String           @db.Uuid
+  courseId          String           @db.Uuid
+  institutionId     String           @db.Uuid
+  cohortId          String?          @db.Uuid
+  status            EnrollmentStatus
+  source            EnrollmentSource @default(SELF)
+  statusReason      String?          @db.VarChar(500)
+  holdsSeat         Boolean          @default(false)
+  enrolledAt        DateTime         @default(now()) @db.Timestamptz(3)
+  activatedAt       DateTime?        @db.Timestamptz(3)
+  completedAt       DateTime?        @db.Timestamptz(3)
+  cancelledAt       DateTime?        @db.Timestamptz(3)
+  expiresAt         DateTime?        @db.Timestamptz(3)
+  progressPercent   Int              @default(0)
+  completedLessons  Int              @default(0)
+  requiredLessons   Int              @default(0)
+  lastActivityAt    DateTime?        @db.Timestamptz(3)
+  lastLessonId      String?          @db.Uuid
+  finalScorePercent Decimal?         @db.Decimal(5, 2)
+  version           Int              @default(1)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  course          Course              @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  institution     Institution         @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  cohort          Cohort?             @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  events          EnrollmentEvent[]
+  lessonProgress  LessonProgress[]
+  sectionProgress SectionProgress[]
+  certificate     Certificate?
+  attempts        AssessmentAttempt[]
+  results         AssessmentResult[]
+
+  @@unique([userId, courseId])
+  @@index([courseId, status])
+  @@index([userId, status, lastActivityAt])
+  @@index([institutionId, status])
+  @@index([cohortId])
+  @@map("enrollments")
+}
+
+model EnrollmentEvent {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  enrollmentId String            @db.Uuid
+  fromStatus   EnrollmentStatus?
+  toStatus     EnrollmentStatus
+  actorId      String?           @db.Uuid
+  reason       String?           @db.VarChar(500)
+  occurredAt   DateTime          @default(now()) @db.Timestamptz(3)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  actor      User?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([enrollmentId, occurredAt])
+  @@map("enrollment_events")
+}
+
+model ProgramEnrollment {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  userId      String           @db.Uuid
+  programId   String           @db.Uuid
+  status      EnrollmentStatus
+  enrolledAt  DateTime         @default(now()) @db.Timestamptz(3)
+  completedAt DateTime?        @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  program Program @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, programId])
+  @@index([programId, status])
+  @@map("program_enrollments")
+}
+
+model LessonProgress {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  enrollmentId     String         @db.Uuid
+  userId           String         @db.Uuid
+  courseId         String         @db.Uuid
+  lessonId         String         @db.Uuid
+  status           ProgressStatus @default(IN_PROGRESS)
+  progressPercent  Int            @default(0)
+  positionSeconds  Int?
+  timeSpentSeconds Int            @default(0)
+  firstViewedAt    DateTime       @default(now()) @db.Timestamptz(3)
+  lastViewedAt     DateTime       @default(now()) @db.Timestamptz(3)
+  completedAt      DateTime?      @db.Timestamptz(3)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson     Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, lessonId])
+  @@index([userId, lastViewedAt])
+  @@index([lessonId, status])
+  @@index([courseId])
+  @@map("lesson_progress")
+}
+
+model SectionProgress {
+  id               String      @id @default(uuid(7)) @db.Uuid
+  enrollmentId     String      @db.Uuid
+  sectionType      SectionType
+  sectionId        String      @db.Uuid
+  completedLessons Int         @default(0)
+  requiredLessons  Int         @default(0)
+  progressPercent  Int         @default(0)
+  completedAt      DateTime?   @db.Timestamptz(3)
+  updatedAt        DateTime    @updatedAt @db.Timestamptz(3)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, sectionType, sectionId])
+  @@map("section_progress")
+}
+
+model ActivityEvent {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  userId       String   @db.Uuid
+  courseId     String?  @db.Uuid
+  lessonId     String?  @db.Uuid
+  enrollmentId String?  @db.Uuid
+  verb         String   @db.VarChar(60)
+  data         Json?
+  occurredAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, occurredAt])
+  @@index([courseId, occurredAt])
+  @@index([occurredAt(ops: TimestampTzMinMaxOps)], type: Brin, map: "activity_events_occurred_at_brin")
+  @@map("activity_events")
+}
+
+model Certificate {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  userId           String            @db.Uuid
+  courseId         String?           @db.Uuid
+  programId        String?           @db.Uuid
+  enrollmentId     String?           @unique @db.Uuid
+  verificationCode String            @unique @db.VarChar(32)
+  status           CertificateStatus @default(ISSUED)
+  snapshot         Json
+  fileId           String?           @db.Uuid
+  issuedAt         DateTime          @default(now()) @db.Timestamptz(3)
+  revokedAt        DateTime?         @db.Timestamptz(3)
+  revokedReason    String?           @db.VarChar(500)
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  course     Course?     @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  program    Program?    @relation(fields: [programId], references: [id], onDelete: Restrict)
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  file       File?       @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([userId, issuedAt])
+  @@map("certificates")
+}

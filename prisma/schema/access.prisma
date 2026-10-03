@@ -1,0 +1,97 @@
+enum RoleScope {
+  PLATFORM
+  INSTITUTION
+  COURSE
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum MemberType {
+  STUDENT
+  TEACHER
+  STAFF
+  ADMIN
+}
+
+model Role {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  key           String    @db.VarChar(80)
+  name          String    @db.VarChar(120)
+  description   String?   @db.VarChar(500)
+  scope         RoleScope
+  institutionId String?   @db.Uuid
+  isSystem      Boolean   @default(false)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  institution Institution?     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  assignments RoleAssignment[]
+
+  @@unique([institutionId, key])
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId     String @db.Uuid
+  permission String @db.VarChar(100)
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permission])
+  @@map("role_permissions")
+}
+
+model RoleAssignment {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  userId        String    @db.Uuid
+  roleId        String    @db.Uuid
+  scopeType     RoleScope
+  scopeKey      String    @db.VarChar(80)
+  institutionId String?   @db.Uuid
+  courseId      String?   @db.Uuid
+  grantedById   String?   @db.Uuid
+  expiresAt     DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+
+  user        User         @relation("RoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  role        Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  grantedBy   User?        @relation("RoleAssignmentGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  course      Course?      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, scopeKey])
+  @@index([userId])
+  @@index([institutionId])
+  @@index([courseId])
+  @@index([roleId])
+  @@map("role_assignments")
+}
+
+model InstitutionMembership {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  institutionId String           @db.Uuid
+  userId        String           @db.Uuid
+  status        MembershipStatus @default(ACTIVE)
+  memberType    MemberType       @default(STUDENT)
+  externalId    String?          @db.VarChar(80)
+  invitedById   String?          @db.Uuid
+  joinedAt      DateTime?        @db.Timestamptz(3)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(3)
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user        User        @relation("MembershipUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy   User?       @relation("MembershipInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([institutionId, userId])
+  @@unique([institutionId, externalId])
+  @@index([userId, status])
+  @@index([institutionId, status, memberType])
+  @@map("institution_memberships")
+}

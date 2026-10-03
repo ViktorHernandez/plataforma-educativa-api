@@ -1,0 +1,188 @@
+enum ActorType {
+  USER
+  SYSTEM
+  INTEGRATION
+  ANONYMOUS
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+  DENIED
+}
+
+enum AuditCategory {
+  SECURITY
+  ACCESS
+  ACADEMIC
+  ADMINISTRATION
+  DATA
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum PrivacyRequestType {
+  EXPORT
+  DELETION
+}
+
+enum PrivacyRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum KeyRotationStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ReportExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model AuditLog {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  occurredAt    DateTime      @default(now()) @db.Timestamptz(3)
+  actorId       String?       @db.Uuid
+  actorType     ActorType
+  action        String        @db.VarChar(100)
+  category      AuditCategory
+  outcome       AuditOutcome
+  resourceType  String?       @db.VarChar(60)
+  resourceId    String?       @db.VarChar(80)
+  institutionId String?       @db.Uuid
+  ipAddress     String?       @db.VarChar(64)
+  userAgent     String?       @db.VarChar(512)
+  requestId     String?       @db.VarChar(64)
+  metadata      Json?
+  legalHold     Boolean       @default(false)
+
+  @@index([actorId, occurredAt])
+  @@index([institutionId, occurredAt])
+  @@index([action, occurredAt])
+  @@index([resourceType, resourceId])
+  @@index([occurredAt])
+  @@map("audit_logs")
+}
+
+model OutboxEvent {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  type             String    @db.VarChar(100)
+  aggregateType    String?   @db.VarChar(60)
+  aggregateId      String?   @db.VarChar(80)
+  payload          Json      @default("{}")
+  sensitivePayload String?
+  requestId        String?   @db.VarChar(64)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  availableAt      DateTime  @default(now()) @db.Timestamptz(3)
+  dispatchedAt     DateTime? @db.Timestamptz(3)
+  processedAt      DateTime? @db.Timestamptz(3)
+  failedAt         DateTime? @db.Timestamptz(3)
+  attempts         Int       @default(0)
+  lastError        String?   @db.VarChar(1000)
+
+  @@index([processedAt, createdAt])
+  @@map("outbox_events")
+}
+
+model InboundWebhookEvent {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  provider    String             @db.VarChar(40)
+  externalId  String             @db.VarChar(255)
+  eventType   String             @db.VarChar(100)
+  status      WebhookEventStatus @default(RECEIVED)
+  payload     Json
+  attempts    Int                @default(0)
+  lastError   String?            @db.VarChar(1000)
+  receivedAt  DateTime           @default(now()) @db.Timestamptz(3)
+  processedAt DateTime?          @db.Timestamptz(3)
+
+  @@unique([provider, externalId])
+  @@index([status, receivedAt])
+  @@map("inbound_webhook_events")
+}
+
+model ReportExport {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  requestedById String             @db.Uuid
+  institutionId String?            @db.Uuid
+  type          String             @db.VarChar(60)
+  params        Json
+  status        ReportExportStatus @default(PENDING)
+  fileId        String?            @db.Uuid
+  error         String?            @db.VarChar(1000)
+  rowCount      Int?
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+  startedAt     DateTime?          @db.Timestamptz(3)
+  completedAt   DateTime?          @db.Timestamptz(3)
+  expiresAt     DateTime?          @db.Timestamptz(3)
+
+  requestedBy User         @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  file        File?        @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([requestedById, createdAt])
+  @@map("report_exports")
+}
+
+model PlatformSetting {
+  key         String   @id @db.VarChar(100)
+  value       Json
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("platform_settings")
+}
+
+model PrivacyRequest {
+  id           String               @id @default(uuid(7)) @db.Uuid
+  userId       String               @db.Uuid
+  type         PrivacyRequestType
+  status       PrivacyRequestStatus @default(PENDING)
+  requestedAt  DateTime             @default(now()) @db.Timestamptz(3)
+  scheduledFor DateTime             @default(now()) @db.Timestamptz(3)
+  startedAt    DateTime?            @db.Timestamptz(3)
+  completedAt  DateTime?            @db.Timestamptz(3)
+  cancelledAt  DateTime?            @db.Timestamptz(3)
+  expiresAt    DateTime?            @db.Timestamptz(3)
+  fileId       String?              @db.Uuid
+  summary      Json?
+  error        String?              @db.VarChar(1000)
+  requestId    String?              @db.VarChar(64)
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  file File? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([userId, requestedAt])
+  @@index([type, status, scheduledFor])
+  @@map("privacy_requests")
+}
+
+model KeyRotationRun {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  targetKeyId   String            @db.VarChar(32)
+  status        KeyRotationStatus @default(RUNNING)
+  requestedById String?           @db.Uuid
+  processed     Int               @default(0)
+  failed        Int               @default(0)
+  progress      Json              @default("{}")
+  lastError     String?           @db.VarChar(1000)
+  startedAt     DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
+  completedAt   DateTime?         @db.Timestamptz(3)
+
+  @@index([status, startedAt])
+  @@map("key_rotation_runs")
+}

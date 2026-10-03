@@ -1,0 +1,55 @@
+name: plataforma-educativa
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  clamav:
+    image: clamav/clamav:stable
+    profiles: ["antivirus"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 180s
+
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["offline"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_local_dev
+      POSTGRES_DB: plataforma_dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/sql/init-local-databases.sql:/docker-entrypoint-initdb.d/init-local-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d plataforma_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  redis-data:
+  clamav-data:
+  postgres-data:

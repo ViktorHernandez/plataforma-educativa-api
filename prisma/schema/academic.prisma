@@ -1,0 +1,543 @@
+enum InstitutionType {
+  PLATFORM
+  UNIVERSITY
+  SCHOOL
+  COMPANY
+  ACADEMY
+  OTHER
+}
+
+enum InstitutionStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ProgramKind {
+  PROGRAM
+  LEARNING_PATH
+  SPECIALIZATION
+  DEGREE
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseKind {
+  COURSE
+  SUBJECT
+  WORKSHOP
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL_LEVELS
+}
+
+enum CourseStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseVisibility {
+  PUBLIC
+  INSTITUTION
+  UNLISTED
+  PRIVATE
+}
+
+enum EnrollmentPolicy {
+  OPEN
+  APPROVAL
+  INVITE_ONLY
+  CLOSED
+}
+
+enum AccessModel {
+  FREE
+  PAID
+}
+
+enum CohortStatus {
+  PLANNED
+  OPEN
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+enum ClassGroupRole {
+  STUDENT
+  TUTOR
+  TEACHER
+}
+
+enum LessonType {
+  VIDEO
+  ARTICLE
+  DOCUMENT
+  ASSESSMENT
+  ASSIGNMENT
+  LIVE_SESSION
+  EXTERNAL_LINK
+  INTERACTIVE
+}
+
+enum ResourceKind {
+  FILE
+  LINK
+}
+
+enum FilePurpose {
+  AVATAR
+  COURSE_COVER
+  LESSON_MEDIA
+  LESSON_RESOURCE
+  CAPTION
+  MESSAGE_ATTACHMENT
+  REPORT_EXPORT
+  SUBMISSION
+  DATA_EXPORT
+}
+
+enum FileScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  FAILED
+  SKIPPED
+  NOT_REQUIRED
+}
+
+enum FileStatus {
+  PENDING_UPLOAD
+  PROCESSING
+  READY
+  REJECTED
+  DELETED
+}
+
+enum FileVisibility {
+  PRIVATE
+  INSTITUTION
+  PUBLIC
+}
+
+enum MediaTrackKind {
+  CAPTIONS
+  SUBTITLES
+  DESCRIPTIONS
+  CHAPTERS
+  TRANSCRIPT
+}
+
+model Institution {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  slug            String            @unique @db.VarChar(80)
+  name            String            @db.VarChar(160)
+  type            InstitutionType   @default(OTHER)
+  status          InstitutionStatus @default(ACTIVE)
+  isPlatform      Boolean           @default(false)
+  defaultLocale   String            @default("es") @db.VarChar(20)
+  defaultTimezone String            @default("UTC") @db.VarChar(64)
+  defaultCurrency String            @default("USD") @db.Char(3)
+  customDomain    String?           @unique @db.VarChar(253)
+  settings        Json              @default("{}")
+  branding        Json              @default("{}")
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(3)
+
+  roles           Role[]
+  roleAssignments RoleAssignment[]
+  memberships     InstitutionMembership[]
+  categories      Category[]
+  tags            Tag[]
+  programs        Program[]
+  courses         Course[]
+  classGroups     ClassGroup[]
+  files           File[]
+  enrollments     Enrollment[]
+  questionBanks   QuestionBank[]
+  assessments     Assessment[]
+  announcements   Announcement[]
+  conversations   Conversation[]
+  reportExports   ReportExport[]
+
+  @@index([status])
+  @@map("institutions")
+}
+
+model Category {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  institutionId String?  @db.Uuid
+  parentId      String?  @db.Uuid
+  slug          String   @db.VarChar(80)
+  names         Json
+  position      Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  parent      Category?    @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Category[]   @relation("CategoryTree")
+  courses     Course[]
+
+  @@unique([institutionId, slug])
+  @@index([parentId])
+  @@map("categories")
+}
+
+model Tag {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  institutionId String   @db.Uuid
+  slug          String   @db.VarChar(60)
+  label         String   @db.VarChar(80)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  courses     CourseTag[]
+
+  @@unique([institutionId, slug])
+  @@map("tags")
+}
+
+model Program {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  institutionId  String        @db.Uuid
+  slug           String        @db.VarChar(120)
+  kind           ProgramKind   @default(PROGRAM)
+  title          String        @db.VarChar(200)
+  summary        String?       @db.VarChar(500)
+  description    String?
+  status         ContentStatus @default(DRAFT)
+  level          CourseLevel   @default(ALL_LEVELS)
+  estimatedHours Int?
+  createdById    String?       @db.Uuid
+  publishedAt    DateTime?     @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+  deletedAt      DateTime?     @db.Timestamptz(3)
+
+  institution  Institution         @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  createdBy    User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  courses      ProgramCourse[]
+  enrollments  ProgramEnrollment[]
+  certificates Certificate[]
+
+  @@unique([institutionId, slug])
+  @@index([status, publishedAt])
+  @@map("programs")
+}
+
+model ProgramCourse {
+  programId  String  @db.Uuid
+  courseId   String  @db.Uuid
+  position   Int
+  isRequired Boolean @default(true)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@id([programId, courseId])
+  @@index([courseId])
+  @@map("program_courses")
+}
+
+model Course {
+  id                  String           @id @default(uuid(7)) @db.Uuid
+  institutionId       String           @db.Uuid
+  slug                String           @db.VarChar(120)
+  kind                CourseKind       @default(COURSE)
+  title               String           @db.VarChar(200)
+  subtitle            String?          @db.VarChar(300)
+  summary             String?          @db.VarChar(1000)
+  description         String?
+  language            String           @default("es") @db.VarChar(20)
+  level               CourseLevel      @default(ALL_LEVELS)
+  status              CourseStatus     @default(DRAFT)
+  visibility          CourseVisibility @default(PUBLIC)
+  enrollmentPolicy    EnrollmentPolicy @default(OPEN)
+  accessModel         AccessModel      @default(FREE)
+  capacity            Int?
+  seatsTaken          Int              @default(0)
+  enrollmentOpensAt   DateTime?        @db.Timestamptz(3)
+  enrollmentClosesAt  DateTime?        @db.Timestamptz(3)
+  startsAt            DateTime?        @db.Timestamptz(3)
+  endsAt              DateTime?        @db.Timestamptz(3)
+  estimatedMinutes    Int?
+  certificateEnabled  Boolean          @default(false)
+  completionThreshold Int              @default(100)
+  coverFileId         String?          @db.Uuid
+  categoryId          String?          @db.Uuid
+  createdById         String?          @db.Uuid
+  publishedAt         DateTime?        @db.Timestamptz(3)
+  version             Int              @default(1)
+  createdAt           DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime         @updatedAt @db.Timestamptz(3)
+  deletedAt           DateTime?        @db.Timestamptz(3)
+
+  institution     Institution          @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  coverFile       File?                @relation("CourseCover", fields: [coverFileId], references: [id], onDelete: SetNull)
+  category        Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy       User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  tags            CourseTag[]
+  prerequisites   CoursePrerequisite[] @relation("CourseRequires")
+  requiredBy      CoursePrerequisite[] @relation("CourseRequiredBy")
+  programs        ProgramCourse[]
+  cohorts         Cohort[]
+  modules         CourseModule[]
+  units           CourseUnit[]
+  lessons         Lesson[]
+  roleAssignments RoleAssignment[]
+  enrollments     Enrollment[]
+  lessonProgress  LessonProgress[]
+  certificates    Certificate[]
+  questionBanks   QuestionBank[]
+  assessments     Assessment[]
+  announcements   Announcement[]
+  conversations   Conversation[]
+
+  @@unique([institutionId, slug])
+  @@index([status, visibility, publishedAt])
+  @@index([institutionId, status])
+  @@index([categoryId])
+  @@index([coverFileId])
+  @@map("courses")
+}
+
+model CourseTag {
+  courseId String @db.Uuid
+  tagId    String @db.Uuid
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, tagId])
+  @@index([tagId])
+  @@map("course_tags")
+}
+
+model CoursePrerequisite {
+  courseId       String @db.Uuid
+  prerequisiteId String @db.Uuid
+
+  course       Course @relation("CourseRequires", fields: [courseId], references: [id], onDelete: Cascade)
+  prerequisite Course @relation("CourseRequiredBy", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, prerequisiteId])
+  @@index([prerequisiteId])
+  @@map("course_prerequisites")
+}
+
+model Cohort {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  courseId           String       @db.Uuid
+  name               String       @db.VarChar(120)
+  status             CohortStatus @default(PLANNED)
+  startsAt           DateTime?    @db.Timestamptz(3)
+  endsAt             DateTime?    @db.Timestamptz(3)
+  enrollmentOpensAt  DateTime?    @db.Timestamptz(3)
+  enrollmentClosesAt DateTime?    @db.Timestamptz(3)
+  capacity           Int?
+  seatsTaken         Int          @default(0)
+  timezone           String?      @db.VarChar(64)
+  createdAt          DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @db.Timestamptz(3)
+
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+
+  @@index([courseId, status])
+  @@map("cohorts")
+}
+
+model ClassGroup {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  institutionId String   @db.Uuid
+  code          String   @db.VarChar(40)
+  name          String   @db.VarChar(120)
+  description   String?  @db.VarChar(500)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  institution Institution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  members     ClassGroupMember[]
+
+  @@unique([institutionId, code])
+  @@map("class_groups")
+}
+
+model ClassGroupMember {
+  groupId String         @db.Uuid
+  userId  String         @db.Uuid
+  role    ClassGroupRole @default(STUDENT)
+  addedAt DateTime       @default(now()) @db.Timestamptz(3)
+
+  group ClassGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("class_group_members")
+}
+
+model CourseModule {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  courseId  String   @db.Uuid
+  position  Int
+  title     String   @db.VarChar(200)
+  summary   String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  course  Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  units   CourseUnit[]
+  lessons Lesson[]
+
+  @@index([courseId, position])
+  @@map("course_modules")
+}
+
+model CourseUnit {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  moduleId  String   @db.Uuid
+  courseId  String   @db.Uuid
+  position  Int
+  title     String   @db.VarChar(200)
+  summary   String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  module  CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  course  Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([moduleId, position])
+  @@index([courseId])
+  @@map("course_units")
+}
+
+model Lesson {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  unitId           String        @db.Uuid
+  moduleId         String        @db.Uuid
+  courseId         String        @db.Uuid
+  position         Int
+  title            String        @db.VarChar(200)
+  type             LessonType
+  status           ContentStatus @default(DRAFT)
+  isRequired       Boolean       @default(true)
+  isPreview        Boolean       @default(false)
+  estimatedMinutes Int?
+  durationSeconds  Int?
+  body             String?
+  contentUrl       String?       @db.VarChar(2000)
+  mediaFileId      String?       @db.Uuid
+  assessmentId     String?       @unique @db.Uuid
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  unit       CourseUnit       @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  module     CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  course     Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  mediaFile  File?            @relation("LessonMedia", fields: [mediaFileId], references: [id], onDelete: SetNull)
+  assessment Assessment?      @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  resources  LessonResource[]
+  progress   LessonProgress[]
+
+  @@index([unitId, position])
+  @@index([courseId, status])
+  @@index([mediaFileId])
+  @@map("lessons")
+}
+
+model LessonResource {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  lessonId    String       @db.Uuid
+  position    Int
+  kind        ResourceKind
+  title       String       @db.VarChar(200)
+  description String?      @db.VarChar(1000)
+  fileId      String?      @db.Uuid
+  url         String?      @db.VarChar(2000)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  file   File?  @relation("LessonResourceFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([lessonId, position])
+  @@index([fileId])
+  @@map("lesson_resources")
+}
+
+model File {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  ownerId           String?        @db.Uuid
+  institutionId     String?        @db.Uuid
+  purpose           FilePurpose
+  status            FileStatus     @default(PENDING_UPLOAD)
+  visibility        FileVisibility @default(PRIVATE)
+  storageProvider   String         @db.VarChar(20)
+  objectKey         String         @unique @db.VarChar(512)
+  originalName      String         @db.VarChar(255)
+  mimeType          String         @db.VarChar(127)
+  declaredSizeBytes BigInt
+  sizeBytes         BigInt?
+  checksumSha256    String?        @db.VarChar(64)
+  altText           String?        @db.VarChar(500)
+  rejectedReason    String?        @db.VarChar(200)
+  scanStatus        FileScanStatus @default(PENDING)
+  scanEngine        String?        @db.VarChar(60)
+  scanSignature     String?        @db.VarChar(200)
+  scannedAt         DateTime?      @db.Timestamptz(3)
+  quarantineKey     String?        @db.VarChar(600)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(3)
+  uploadedAt        DateTime?      @db.Timestamptz(3)
+  readyAt           DateTime?      @db.Timestamptz(3)
+  expiresAt         DateTime?      @db.Timestamptz(3)
+  deletedAt         DateTime?      @db.Timestamptz(3)
+
+  owner              User?               @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  institution        Institution?        @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  profileAvatar      UserProfile?        @relation("ProfileAvatar")
+  coverOfCourses     Course[]            @relation("CourseCover")
+  lessonMedia        Lesson[]            @relation("LessonMedia")
+  lessonResources    LessonResource[]    @relation("LessonResourceFile")
+  mediaTracks        MediaTrack[]        @relation("MediaTrackMedia")
+  trackOf            MediaTrack[]        @relation("MediaTrackFile")
+  messageAttachments MessageAttachment[]
+  certificates       Certificate[]
+  reportExports      ReportExport[]
+  privacyRequests    PrivacyRequest[]
+
+  @@index([ownerId, createdAt])
+  @@index([status, createdAt])
+  @@index([scanStatus, uploadedAt])
+  @@index([expiresAt])
+  @@map("files")
+}
+
+model MediaTrack {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  mediaFileId String         @db.Uuid
+  trackFileId String         @db.Uuid
+  kind        MediaTrackKind
+  language    String         @db.VarChar(20)
+  label       String         @db.VarChar(80)
+  isDefault   Boolean        @default(false)
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+
+  mediaFile File @relation("MediaTrackMedia", fields: [mediaFileId], references: [id], onDelete: Cascade)
+  trackFile File @relation("MediaTrackFile", fields: [trackFileId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaFileId, kind, language])
+  @@index([trackFileId])
+  @@map("media_tracks")
+}

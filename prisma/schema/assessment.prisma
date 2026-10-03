@@ -1,0 +1,324 @@
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  NUMERIC
+  ESSAY
+  MATCHING
+  ORDERING
+}
+
+enum QuestionStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AssessmentType {
+  QUIZ
+  EXAM
+  PRACTICE
+  SURVEY
+}
+
+enum AssessmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum ScoringPolicy {
+  HIGHEST
+  LATEST
+  AVERAGE
+  FIRST
+}
+
+enum RevealPolicy {
+  NEVER
+  AFTER_SUBMISSION
+  AFTER_CLOSE
+}
+
+enum AssessmentItemKind {
+  FIXED
+  POOL
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  PENDING_REVIEW
+  GRADED
+  VOIDED
+}
+
+enum GradingMode {
+  AUTO
+  MANUAL
+}
+
+model QuestionBank {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  institutionId String    @db.Uuid
+  courseId      String?   @db.Uuid
+  title         String    @db.VarChar(200)
+  description   String?   @db.VarChar(1000)
+  createdById   String?   @db.Uuid
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  archivedAt    DateTime? @db.Timestamptz(3)
+
+  institution Institution        @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  course      Course?            @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  categories  QuestionCategory[]
+  questions   Question[]
+  poolItems   AssessmentItem[]
+
+  @@index([institutionId, archivedAt])
+  @@index([courseId])
+  @@map("question_banks")
+}
+
+model QuestionCategory {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  bankId    String   @db.Uuid
+  name      String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  bank      QuestionBank     @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  questions Question[]
+  poolItems AssessmentItem[]
+
+  @@unique([bankId, name])
+  @@map("question_categories")
+}
+
+model Question {
+  id          String              @id @default(uuid(7)) @db.Uuid
+  bankId      String              @db.Uuid
+  categoryId  String?             @db.Uuid
+  type        QuestionType
+  status      QuestionStatus      @default(DRAFT)
+  difficulty  QuestionDifficulty?
+  prompt      String
+  explanation String?
+  points      Decimal             @default(1) @db.Decimal(8, 2)
+  config      Json                @default("{}")
+  tags        String[]
+  version     Int                 @default(1)
+  createdById String?             @db.Uuid
+  createdAt   DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime            @updatedAt @db.Timestamptz(3)
+
+  bank             QuestionBank      @relation(fields: [bankId], references: [id], onDelete: Restrict)
+  category         QuestionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy        User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  options          QuestionOption[]
+  assessmentItems  AssessmentItem[]
+  attemptQuestions AttemptQuestion[]
+
+  @@index([bankId, status])
+  @@index([categoryId, status])
+  @@map("questions")
+}
+
+model QuestionOption {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  questionId  String  @db.Uuid
+  position    Int
+  text        String  @db.VarChar(2000)
+  isCorrect   Boolean @default(false)
+  feedback    String? @db.VarChar(1000)
+  matchTarget String? @db.VarChar(1000)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId, position])
+  @@map("question_options")
+}
+
+model Assessment {
+  id                  String           @id @default(uuid(7)) @db.Uuid
+  courseId            String           @db.Uuid
+  institutionId       String           @db.Uuid
+  title               String           @db.VarChar(200)
+  instructions        String?
+  type                AssessmentType   @default(QUIZ)
+  status              AssessmentStatus @default(DRAFT)
+  opensAt             DateTime?        @db.Timestamptz(3)
+  closesAt            DateTime?        @db.Timestamptz(3)
+  timeLimitSeconds    Int?
+  gracePeriodSeconds  Int              @default(30)
+  maxAttempts         Int?
+  scoringPolicy       ScoringPolicy    @default(HIGHEST)
+  passingScorePercent Decimal?         @db.Decimal(5, 2)
+  shuffleQuestions    Boolean          @default(false)
+  shuffleOptions      Boolean          @default(false)
+  feedbackPolicy      RevealPolicy     @default(AFTER_SUBMISSION)
+  revealAnswersPolicy RevealPolicy     @default(AFTER_CLOSE)
+  weight              Decimal          @default(1) @db.Decimal(6, 2)
+  createdById         String?          @db.Uuid
+  publishedAt         DateTime?        @db.Timestamptz(3)
+  version             Int              @default(1)
+  createdAt           DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime         @updatedAt @db.Timestamptz(3)
+  deletedAt           DateTime?        @db.Timestamptz(3)
+
+  course         Course                    @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  institution    Institution               @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  createdBy      User?                     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  items          AssessmentItem[]
+  attempts       AssessmentAttempt[]
+  results        AssessmentResult[]
+  accommodations AssessmentAccommodation[]
+  lesson         Lesson?
+
+  @@index([courseId, status])
+  @@map("assessments")
+}
+
+model AssessmentItem {
+  id             String              @id @default(uuid(7)) @db.Uuid
+  assessmentId   String              @db.Uuid
+  position       Int
+  kind           AssessmentItemKind
+  questionId     String?             @db.Uuid
+  bankId         String?             @db.Uuid
+  categoryId     String?             @db.Uuid
+  difficulty     QuestionDifficulty?
+  drawCount      Int                 @default(1)
+  pointsOverride Decimal?            @db.Decimal(8, 2)
+
+  assessment Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question   Question?         @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  bank       QuestionBank?     @relation(fields: [bankId], references: [id], onDelete: Restrict)
+  category   QuestionCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([assessmentId, position])
+  @@index([questionId])
+  @@map("assessment_items")
+}
+
+model AssessmentAttempt {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  assessmentId     String        @db.Uuid
+  userId           String        @db.Uuid
+  enrollmentId     String?       @db.Uuid
+  attemptNumber    Int
+  status           AttemptStatus @default(IN_PROGRESS)
+  seed             Int
+  startedAt        DateTime      @default(now()) @db.Timestamptz(3)
+  deadlineAt       DateTime?     @db.Timestamptz(3)
+  extraTimeSeconds Int           @default(0)
+  submittedAt      DateTime?     @db.Timestamptz(3)
+  autoSubmitted    Boolean       @default(false)
+  gradedAt         DateTime?     @db.Timestamptz(3)
+  maxPoints        Decimal       @db.Decimal(10, 2)
+  scorePoints      Decimal?      @db.Decimal(10, 2)
+  scorePercent     Decimal?      @db.Decimal(5, 2)
+  passed           Boolean?
+  ipAddress        String?       @db.VarChar(64)
+
+  assessment Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  enrollment Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  questions  AttemptQuestion[]
+  answers    AttemptAnswer[]
+
+  @@unique([assessmentId, userId, attemptNumber])
+  @@index([userId, assessmentId])
+  @@index([assessmentId, status])
+  @@index([status, deadlineAt])
+  @@map("assessment_attempts")
+}
+
+model AttemptQuestion {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  attemptId       String       @db.Uuid
+  questionId      String       @db.Uuid
+  questionVersion Int
+  position        Int
+  type            QuestionType
+  points          Decimal      @db.Decimal(8, 2)
+  snapshot        Json
+  answerKey       Json
+
+  attempt  AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question          @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  answer   AttemptAnswer?
+
+  @@unique([attemptId, position])
+  @@index([questionId])
+  @@map("attempt_questions")
+}
+
+model AttemptAnswer {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  attemptId         String       @db.Uuid
+  attemptQuestionId String       @unique @db.Uuid
+  response          Json
+  savedAt           DateTime     @default(now()) @db.Timestamptz(3)
+  isCorrect         Boolean?
+  awardedPoints     Decimal?     @db.Decimal(8, 2)
+  gradingMode       GradingMode?
+  feedback          String?      @db.VarChar(4000)
+  gradedById        String?      @db.Uuid
+  gradedAt          DateTime?    @db.Timestamptz(3)
+
+  attempt         AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attemptQuestion AttemptQuestion   @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)
+  gradedBy        User?             @relation(fields: [gradedById], references: [id], onDelete: SetNull)
+
+  @@index([attemptId])
+  @@map("attempt_answers")
+}
+
+model AssessmentResult {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  assessmentId  String   @db.Uuid
+  userId        String   @db.Uuid
+  enrollmentId  String?  @db.Uuid
+  attemptsCount Int      @default(0)
+  scorePercent  Decimal? @db.Decimal(5, 2)
+  passed        Boolean?
+  lastAttemptId String?  @db.Uuid
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  assessment Assessment  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  @@unique([assessmentId, userId])
+  @@index([userId])
+  @@map("assessment_results")
+}
+
+model AssessmentAccommodation {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  assessmentId     String    @db.Uuid
+  userId           String    @db.Uuid
+  extraTimeSeconds Int
+  reason           String?   @db.VarChar(500)
+  grantedById      String?   @db.Uuid
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  user       User       @relation("AccommodationLearner", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy  User?      @relation("AccommodationGrantor", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([assessmentId, userId])
+  @@index([userId])
+  @@map("assessment_accommodations")
+}

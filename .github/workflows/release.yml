@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Trigger the Render deploy hooks after migrating
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+      DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: test -n "$DIRECT_DATABASE_URL"
+      - run: npm ci --ignore-scripts
+      - run: npx prisma migrate deploy
+      - run: npx prisma migrate status
+
+  deploy:
+    needs: migrate
+    if: ${{ inputs.deploy }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      API_DEPLOY_HOOK: ${{ secrets.RENDER_API_DEPLOY_HOOK }}
+      WORKER_DEPLOY_HOOK: ${{ secrets.RENDER_WORKER_DEPLOY_HOOK }}
+    steps:
+      - run: test -n "$API_DEPLOY_HOOK" && test -n "$WORKER_DEPLOY_HOOK"
+      - run: curl --fail --silent --show-error --request POST "$WORKER_DEPLOY_HOOK" > /dev/null
+      - run: curl --fail --silent --show-error --request POST "$API_DEPLOY_HOOK" > /dev/null

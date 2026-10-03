@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "prisma.prisma",
+    "vitest.explorer",
+    "redhat.vscode-yaml",
+    "ms-azuretools.vscode-containers",
+    "editorconfig.editorconfig"
+  ]
+}

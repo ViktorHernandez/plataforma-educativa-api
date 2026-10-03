@@ -1,0 +1,174 @@
+enum NotificationCategory {
+  SECURITY
+  ACADEMIC
+  COMMUNICATION
+  ADMINISTRATIVE
+  SYSTEM
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum AnnouncementAudience {
+  INSTITUTION
+  COURSE
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+  COURSE
+}
+
+enum ParticipantRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Notification {
+  id            String               @id @default(uuid(7)) @db.Uuid
+  userId        String               @db.Uuid
+  category      NotificationCategory
+  type          String               @db.VarChar(80)
+  data          Json                 @default("{}")
+  institutionId String?              @db.Uuid
+  readAt        DateTime?            @db.Timestamptz(3)
+  archivedAt    DateTime?            @db.Timestamptz(3)
+  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([userId, archivedAt, id(sort: Desc)])
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationDelivery {
+  id                String              @id @default(uuid(7)) @db.Uuid
+  notificationId    String              @db.Uuid
+  channel           NotificationChannel
+  status            DeliveryStatus      @default(PENDING)
+  provider          String?             @db.VarChar(40)
+  providerMessageId String?             @db.VarChar(255)
+  attempts          Int                 @default(0)
+  lastError         String?             @db.VarChar(500)
+  sentAt            DateTime?           @db.Timestamptz(3)
+  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, channel])
+  @@map("notification_deliveries")
+}
+
+model Announcement {
+  id            String               @id @default(uuid(7)) @db.Uuid
+  institutionId String               @db.Uuid
+  courseId      String?              @db.Uuid
+  authorId      String?              @db.Uuid
+  audience      AnnouncementAudience
+  title         String               @db.VarChar(200)
+  body          String               @db.VarChar(20000)
+  publishedAt   DateTime             @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  course      Course?     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  author      User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([courseId, publishedAt])
+  @@index([institutionId, publishedAt])
+  @@map("announcements")
+}
+
+model Conversation {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  type          ConversationType
+  institutionId String?          @db.Uuid
+  courseId      String?          @db.Uuid
+  title         String?          @db.VarChar(160)
+  directKey     String?          @unique @db.VarChar(80)
+  createdById   String?          @db.Uuid
+  lastMessageAt DateTime?        @db.Timestamptz(3)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(3)
+
+  institution  Institution?              @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  course       Course?                   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdBy    User?                     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([courseId])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String          @db.Uuid
+  userId         String          @db.Uuid
+  role           ParticipantRole @default(MEMBER)
+  joinedAt       DateTime        @default(now()) @db.Timestamptz(3)
+  leftAt         DateTime?       @db.Timestamptz(3)
+  lastReadAt     DateTime?       @db.Timestamptz(3)
+  mutedUntil     DateTime?       @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, leftAt])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  conversationId  String    @db.Uuid
+  senderId        String?   @db.Uuid
+  body            String    @db.VarChar(8000)
+  clientMessageId String?   @db.VarChar(64)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  editedAt        DateTime? @db.Timestamptz(3)
+  deletedAt       DateTime? @db.Timestamptz(3)
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?               @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  attachments  MessageAttachment[]
+
+  @@unique([conversationId, senderId, clientMessageId])
+  @@index([conversationId, id(sort: Desc)])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  messageId String @db.Uuid
+  fileId    String @db.Uuid
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  file    File    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, fileId])
+  @@index([fileId])
+  @@map("message_attachments")
+}
+
+model EmailSuppression {
+  email     String   @id @db.VarChar(320)
+  reason    String   @db.VarChar(60)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("email_suppressions")
+}
