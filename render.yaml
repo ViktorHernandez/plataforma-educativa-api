@@ -4,7 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     healthCheckPath: /health/ready
     autoDeployTrigger: off
     envVars:
@@ -15,33 +15,9 @@ services:
           name: plataforma-educativa-redis
           property: connectionString
 
-  - type: worker
-    name: plataforma-educativa-worker
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    dockerCommand: node --enable-source-maps dist/worker.js
-    plan: starter
-    autoDeployTrigger: off
-    envVars:
-      - fromGroup: plataforma-educativa-shared
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: plataforma-educativa-redis
-          property: connectionString
-
-  - type: pserv
-    name: plataforma-educativa-clamav
-    runtime: image
-    image:
-      url: docker.io/clamav/clamav:stable
-    plan: standard
-    autoDeployTrigger: off
-
   - type: keyvalue
     name: plataforma-educativa-redis
-    plan: starter
+    plan: free
     maxmemoryPolicy: noeviction
     ipAllowList: []
 
@@ -65,9 +41,9 @@ envVarGroups:
       - key: REDIS_KEY_PREFIX
         value: "pe:"
       - key: ANTIVIRUS_PROVIDER
-        value: clamav
+        value: disabled
       - key: FILE_SCAN_REQUIRED
-        value: "true"
+        value: "false"
       - key: STORAGE_PROVIDER
         value: s3
       - key: MAIL_PROVIDER
@@ -114,7 +90,3 @@ envVarGroups:
         sync: false
       - key: S3_SECRET_ACCESS_KEY
         sync: false
-      - key: CLAMAV_HOST
-        value: plataforma-educativa-clamav
-      - key: CLAMAV_PORT
-        value: "3310"
