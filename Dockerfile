@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS base
+FROM node:26-bookworm-slim AS base
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_FUND=false \
